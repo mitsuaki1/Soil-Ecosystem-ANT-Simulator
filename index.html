@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>土壌生態系 ANT リアルタイムシミュレーター v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&family=Shippori+Mincho:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ─── CSS Variables ─────────────────────────────────────────── */
+:root {
+  --soil-black:   #050403;
+  --soil-deep:    #0b0906;
+  --soil-dark:    #100d09;
+  --soil-mid:     #16110c;
+  --soil-panel:   #1c1510;
+  --soil-border:  #2d2218;
+  --soil-border2: #3d3020;
+
+  --humus:        #a07848;
+  --humus-glow:   #c89858;
+  --humus-dim:    #6a4f30;
+
+  --bacteria:     #00e8ff;
+  --fungi:        #ff8c00;
+  --nematode:     #b8ff00;
+  --protozoa:     #e844ff;
+  --earthworm:    #ff3d3d;
+  --plantroot:    #44ff88;
+  --organic:      #9a7244;
+  --water:        #3db8ff;
+  --oxygen:       #dde8ff;
+
+  --edge-decomp:  rgba(0,232,255,0.28);
+  --edge-pred:    rgba(255,61,61,0.55);
+  --edge-symb:    rgba(68,255,136,0.45);
+  --edge-comp:    rgba(255,140,0,0.30);
+  --edge-trans:   rgba(61,184,255,0.25);
+
+  --text-main:    #c8b89a;
+  --text-sub:     #7a6548;
+  --text-dim:     #4a3d2a;
+
+  --font-serif:   'Shippori Mincho', 'Noto Serif JP', serif;
+  --font-mono:    'JetBrains Mono', monospace;
+}
+
+/* ─── Reset & Base ──────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--soil-black); }
+
+body {
+  display: grid;
+  grid-template-rows: 44px 1fr;
+  grid-template-columns: 1fr 320px;
+  font-family: var(--font-mono);
+  color: var(--text-main);
+  height: 100vh;
+}
+
+/* ─── Header ─────────────────────────────────────────────────── */
+#hdr {
+  grid-column: 1 / -1;
+  background: var(--soil-deep);
+  border-bottom: 1px solid var(--soil-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  gap: 12px;
+}
+
+#hdr-title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+#hdr-title h1 {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--humus-glow);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+#hdr-title .sub {
+  font-size: 9px;
+  color: var(--text-sub);
+  letter-spacing: 0.18em;
+}
+
+#hdr-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.time-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+
+.time-display .tick-val {
+  color: var(--humus-glow);
+  font-size: 11px;
+  font-weight: 500;
+  min-width: 48px;
+  text-align: right;
+}
+
+.time-display .realtime-val {
+  color: var(--bacteria);
+  font-size: 10px;
+  min-width: 64px;
+}
+
+.phase-badge {
+  padding: 2px 8px;
+  border: 1px solid;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  transition: all 0.4s;
+}
+
+.speed-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  color: var(--text-sub);
+}
+
+input[type=range] {
+  width: 70px;
+  accent-color: var(--humus);
+  cursor: pointer;
+}
+
+.btn {
+  background: var(--soil-dark);
+  border: 1px solid var(--soil-border2);
+  color: var(--text-main);
+  padding: 3px 10px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--humus); color: var(--humus-glow); }
+.btn.active { border-color: var(--bacteria); color: var(--bacteria); }
+
+/* ─── Simulation Canvas ──────────────────────────────────────── */
+#sim-wrap {
+  position: relative;
+  background: var(--soil-black);
+  overflow: hidden;
+}
+
+#sim-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+/* Canvas overlay labels */
+.canvas-label {
+  position: absolute;
+  pointer-events: none;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+}
+#lbl-tl { top: 10px; left: 12px; }
+#lbl-br { bottom: 10px; right: 12px; text-align: right; }
+
+/* Phase annotation */
+#phase-annotation {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  text-align: center;
+}
+#phase-annotation .ph-name {
+  font-family: var(--font-serif);
+  font-size: 11px;
+  color: var(--humus-glow);
+  letter-spacing: 0.1em;
+}
+#phase-annotation .ph-desc {
+  font-size: 8px;
+  color: var(--text-sub);
+  letter-spacing: 0.15em;
+}
+
+/* Tooltip */
+#tooltip {
+  position: absolute;
+  background: rgba(11,9,6,0.95);
+  border: 1px solid var(--soil-border2);
+  border-left: 2px solid var(--humus);
+  padding: 6px 10px;
+  font-size: 9px;
+  line-height: 1.8;
+  pointer-events: none;
+  display: none;
+  z-index: 20;
+  letter-spacing: 0.05em;
+  max-width: 180px;
+}
+
+/* ─── Right Panel ────────────────────────────────────────────── */
+#panel {
+  background: var(--soil-panel);
+  border-left: 1px solid var(--soil-border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--soil-border2) transparent;
+}
+
+.sec {
+  border-bottom: 1px solid var(--soil-border);
+  padding: 10px 12px;
+  flex-shrink: 0;
+}
+
+.sec-title {
+  font-size: 8px;
+  letter-spacing: 0.25em;
+  color: var(--text-sub);
+  text-transform: uppercase;
+  margin-bottom: 9px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sec-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--soil-border);
+}
+
+/* ─── Metric Grid ────────────────────────────────────────────── */
+.metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 5px;
+}
+
+.metric-box {
+  background: var(--soil-dark);
+  border: 1px solid var(--soil-border);
+  padding: 6px 7px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s;
+}
+.metric-box::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--accent-color, var(--humus));
+  opacity: 0.6;
+}
+.metric-box:nth-child(1) { --accent-color: var(--bacteria); }
+.metric-box:nth-child(2) { --accent-color: var(--fungi); }
+.metric-box:nth-child(3) { --accent-color: var(--nematode); }
+.metric-box:nth-child(4) { --accent-color: var(--protozoa); }
+.metric-box:nth-child(5) { --accent-color: var(--earthworm); }
+.metric-box:nth-child(6) { --accent-color: var(--plantroot); }
+
+.m-label {
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  color: var(--text-sub);
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+.m-symbol {
+  font-size: 7px;
+  color: var(--accent-color, var(--humus));
+  float: right;
+  font-style: italic;
+}
+.m-value {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-main);
+  line-height: 1;
+}
+
+/* ─── Population bars ────────────────────────────────────────── */
+.pop-table { display: flex; flex-direction: column; gap: 4px; }
+
+.pop-row {
+  display: grid;
+  grid-template-columns: 8px 58px 1fr 28px;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+}
+
+.pop-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+
+.pop-name { color: var(--text-sub); font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pop-bar-bg {
+  height: 5px;
+  background: var(--soil-deep);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.pop-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s;
+}
+
+.pop-count { text-align: right; font-size: 8px; color: var(--text-sub); }
+
+/* ─── OPP indicator ─────────────────────────────────────────── */
+.opp-grid { display: flex; flex-direction: column; gap: 4px; }
+.opp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+}
+.opp-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 2px solid;
+  flex-shrink: 0;
+  transition: box-shadow 0.3s;
+}
+.opp-dot.active { box-shadow: 0 0 6px 2px currentColor; }
+.opp-label { color: var(--text-sub); font-size: 8px; flex: 1; }
+.opp-val { font-size: 9px; min-width: 30px; text-align: right; }
+
+/* ─── Chart canvases ─────────────────────────────────────────── */
+.chart-wrap { margin-bottom: 8px; }
+.chart-label { font-size: 8px; color: var(--text-sub); margin-bottom: 3px; letter-spacing: 0.1em; }
+.mini-chart { width: 100%; display: block; background: var(--soil-deep); border: 1px solid var(--soil-border); }
+
+/* ─── Phase timeline ─────────────────────────────────────────── */
+.phase-timeline {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.phase-seg {
+  flex: 1;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  letter-spacing: 0.05em;
+  opacity: 0.5;
+  border: 1px solid;
+  transition: opacity 0.4s, box-shadow 0.4s;
+  cursor: default;
+}
+.phase-seg.active {
+  opacity: 1;
+  box-shadow: 0 0 6px currentColor;
+}
+
+/* ─── Interaction matrix ─────────────────────────────────────── */
+.matrix-wrap { overflow-x: auto; }
+.matrix-table {
+  font-size: 7px;
+  border-collapse: collapse;
+  width: 100%;
+}
+.matrix-table th, .matrix-table td {
+  border: 1px solid var(--soil-border);
+  padding: 2px 3px;
+  text-align: center;
+  white-space: nowrap;
+}
+.matrix-table th { background: var(--soil-dark); color: var(--text-sub); }
+.matrix-cell-D { color: var(--bacteria); }
+.matrix-cell-P { color: var(--earthworm); }
+.matrix-cell-S { color: var(--plantroot); }
+.matrix-cell-C { color: var(--fungi); }
+.matrix-cell-T { color: var(--water); }
+.matrix-cell-0 { color: var(--text-dim); }
+
+/* ─── Event log ──────────────────────────────────────────────── */
+#event-log {
+  font-size: 8px;
+  line-height: 1.8;
+  color: var(--text-sub);
+  max-height: 90px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.log-line { display: flex; gap: 6px; }
+.log-tick { color: var(--text-dim); min-width: 36px; }
+.log-msg  { color: var(--text-sub); }
+.log-line.birth .log-msg { color: var(--plantroot); }
+.log-line.death .log-msg { color: var(--earthworm); }
+.log-line.event .log-msg { color: var(--humus-glow); }
+
+/* ─── Legend ─────────────────────────────────────────────────── */
+.legend-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; }
+.leg-item { display: flex; align-items: center; gap: 5px; font-size: 8px; color: var(--text-sub); }
+.leg-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.edge-legend { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.edge-row { display: flex; align-items: center; gap: 6px; font-size: 8px; color: var(--text-sub); }
+.edge-line { width: 22px; height: 2px; border-radius: 1px; flex-shrink: 0; }
+
+/* ─── Formula display ────────────────────────────────────────── */
+.formula-block {
+  background: var(--soil-deep);
+  border: 1px solid var(--soil-border);
+  border-left: 2px solid var(--humus-dim);
+  padding: 6px 10px;
+  margin: 4px 0;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--humus-glow);
+  font-style: italic;
+}
+
+/* scrollbar */
+#panel::-webkit-scrollbar { width: 4px; }
+#panel::-webkit-scrollbar-track { background: transparent; }
+#panel::-webkit-scrollbar-thumb { background: var(--soil-border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═════════════════════════════════════════════════ -->
+<header id="hdr">
+  <div id="hdr-title">
+    <h1>土壌生態系アクターネットワーク・リアルタイムシミュレーター</h1>
+    <div class="sub">ANT-Based Soil Microcosm Simulation — 1 tick = 60 sec (real-time scale)</div>
+  </div>
+  <div id="hdr-controls">
+    <div class="time-display">
+      Tick <span id="tick-val" class="tick-val">0</span>
+      <span style="color:var(--soil-border2)">|</span>
+      経過時間 <span id="realtime-val" class="realtime-val">00:00</span>
+    </div>
+    <div class="phase-badge" id="phase-badge" style="color:var(--bacteria);border-color:var(--bacteria)">Phase 1: 初期増殖期</div>
+    <div class="speed-row">
+      速度
+      <input type="range" id="speed-sl" min="1" max="10" value="4">
+      <span id="speed-val">4×</span>
+    </div>
+    <button class="btn" id="btn-pause">⏸ 停止</button>
+    <button class="btn" id="btn-reset">↺ リセット</button>
+    <button class="btn" id="btn-opp">OPP 表示</button>
+  </div>
+</header>
+
+<!-- ═══ SIMULATION ══════════════════════════════════════════════ -->
+<div id="sim-wrap">
+  <canvas id="sim-canvas"></canvas>
+  <div class="canvas-label" id="lbl-tl">ANT NETWORK — アクター相互作用マップ</div>
+  <div class="canvas-label" id="lbl-br" id="lbl-br">マウスホバーで個体情報表示 / クリックで個体追跡</div>
+  <div id="phase-annotation">
+    <div class="ph-name" id="ph-name">Phase 1: 初期増殖期</div>
+    <div class="ph-desc" id="ph-desc">細菌ブルーム — 有機物分解旺盛期</div>
+  </div>
+  <div id="tooltip"></div>
+</div>
+
+<!-- ═══ RIGHT PANEL ═════════════════════════════════════════════ -->
+<div id="panel">
+
+  <!-- Graph Metrics -->
+  <div class="sec">
+    <div class="sec-title">▸ グラフ理論指標（リアルタイム）</div>
+    <div class="metric-grid">
+      <div class="metric-box">
+        <div class="m-label">ネットワーク密度<span class="m-symbol">ρ</span></div>
+        <div class="m-value" id="m-rho">0.000</div>
+      </div>
+      <div class="metric-box">
+        <div class="m-label">平均次数<span class="m-symbol">k̄</span></div>
+        <div class="m-value" id="m-deg">0.0</div>
+      </div>
+      <div class="metric-box">
+        <div class="m-label">クラスタリング<span class="m-symbol">C</span></div>
+        <div class="m-value" id="m-clust">0.000</div>
+      </div>
+      <div class="metric-box">
+        <div class="m-label">多様性指数<span class="m-symbol">H'</span></div>
+        <div class="m-value" id="m-hprime">0.000</div>
+      </div>
+      <div class="metric-box">
+        <div class="m-label">均等度<span class="m-symbol">J'</span></div>
+        <div class="m-value" id="m-jprime">0.000</div>
+      </div>
+      <div class="metric-box">
+        <div class="m-label">系全安定性<span class="m-symbol">S</span></div>
+        <div class="m-value" id="m-stab">0.000</div>
+      </div>
+    </div>
+    <div class="formula-block" style="margin-top:7px;">ρ = 2m / n(n-1) &nbsp;·&nbsp; H' = -Σ pᵢ ln pᵢ</div>
+    <div class="formula-block">S = 0.4·J' + 0.3·min(20ρ,1) + 0.3·B</div>
+  </div>
+
+  <!-- Phase timeline -->
+  <div class="sec">
+    <div class="sec-title">▸ 生態フェーズ</div>
+    <div class="phase-timeline">
+      <div class="phase-seg active" id="ps-1" style="color:var(--bacteria);border-color:var(--bacteria)">Ph.1<br>増殖</div>
+      <div class="phase-seg" id="ps-2" style="color:var(--earthworm);border-color:var(--earthworm)">Ph.2<br>捕食</div>
+      <div class="phase-seg" id="ps-3" style="color:var(--plantroot);border-color:var(--plantroot)">Ph.3<br>共生</div>
+    </div>
+  </div>
+
+  <!-- Population -->
+  <div class="sec">
+    <div class="sec-title">▸ アクター個体数</div>
+    <div class="pop-table" id="pop-table"></div>
+  </div>
+
+  <!-- OPP -->
+  <div class="sec">
+    <div class="sec-title">▸ 義務的通過点（OPP）</div>
+    <div class="opp-grid" id="opp-grid">
+      <div class="opp-row">
+        <div class="opp-dot" id="opp-fungi" style="color:var(--fungi);border-color:var(--fungi)"></div>
+        <div class="opp-label">菌根菌 — 菌糸ネットワーク仲介</div>
+        <div class="opp-val" id="opp-fungi-val" style="color:var(--fungi)">—</div>
+      </div>
+      <div class="opp-row">
+        <div class="opp-dot" id="opp-water" style="color:var(--water);border-color:var(--water)"></div>
+        <div class="opp-label">水分 — 輸送媒体・全アクター接続</div>
+        <div class="opp-val" id="opp-water-val" style="color:var(--water)">—</div>
+      </div>
+      <div class="opp-row">
+        <div class="opp-dot" id="opp-organic" style="color:var(--organic);border-color:var(--organic)"></div>
+        <div class="opp-label">有機物 — 分解基質・エネルギー源</div>
+        <div class="opp-val" id="opp-organic-val" style="color:var(--organic)">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Time series charts -->
+  <div class="sec">
+    <div class="sec-title">▸ 時系列グラフ</div>
+    <div class="chart-wrap">
+      <div class="chart-label">系全安定性 S &amp; Shannon多様性 H'</div>
+      <canvas class="mini-chart" id="chart-stab" height="45"></canvas>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-label">ネットワーク密度 ρ &amp; クラスタリング係数 C</div>
+      <canvas class="mini-chart" id="chart-net" height="40"></canvas>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-label">主要アクター個体数推移（Lotka-Volterra振動）</div>
+      <canvas class="mini-chart" id="chart-pop" height="55"></canvas>
+    </div>
+  </div>
+
+  <!-- Interaction matrix -->
+  <div class="sec">
+    <div class="sec-title">▸ 相互作用行列（現在フレーム）</div>
+    <div class="matrix-wrap">
+      <table class="matrix-table" id="imatrix">
+        <thead>
+          <tr>
+            <th>actor</th>
+            <th>細菌</th><th>菌根</th><th>線虫</th><th>原生</th><th>蚯蚓</th><th>植根</th><th>有機</th><th>水分</th><th>酸素</th>
+          </tr>
+        </thead>
+        <tbody id="imatrix-body"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:5px;font-size:7px;color:var(--text-dim);">
+      D=分解 P=捕食 S=共生 C=競争 T=輸送 &nbsp;|&nbsp; 太字=高頻度エッジ
+    </div>
+  </div>
+
+  <!-- Lotka-Volterra params -->
+  <div class="sec">
+    <div class="sec-title">▸ Lotka-Volterra 係数（論文 表1）</div>
+    <table class="matrix-table">
+      <thead><tr><th>捕食者</th><th>被食者</th><th>α</th><th>β</th></tr></thead>
+      <tbody>
+        <tr><td style="color:var(--nematode)">線虫</td><td style="color:var(--bacteria)">細菌</td><td class="matrix-cell-P">5.0</td><td class="matrix-cell-P">1.5</td></tr>
+        <tr><td style="color:var(--protozoa)">原生動物</td><td style="color:var(--bacteria)">細菌</td><td class="matrix-cell-P">6.0</td><td class="matrix-cell-P">2.0</td></tr>
+        <tr><td style="color:var(--nematode)">線虫</td><td style="color:var(--fungi)">菌根菌</td><td class="matrix-cell-P">3.0</td><td class="matrix-cell-P">0.8</td></tr>
+        <tr><td style="color:var(--bacteria)">細菌</td><td style="color:var(--organic)">有機物</td><td class="matrix-cell-D">3.0</td><td class="matrix-cell-D">0.7</td></tr>
+        <tr><td style="color:var(--fungi)">菌根菌</td><td style="color:var(--organic)">有機物</td><td class="matrix-cell-D">2.0</td><td class="matrix-cell-D">0.6</td></tr>
+        <tr><td style="color:var(--earthworm)">ミミズ</td><td style="color:var(--organic)">有機物</td><td class="matrix-cell-D">6.0</td><td class="matrix-cell-D">0.9</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Legend -->
+  <div class="sec">
+    <div class="sec-title">▸ アクター凡例</div>
+    <div class="legend-grid" id="node-legend"></div>
+    <div class="edge-legend">
+      <div class="edge-row"><div class="edge-line" style="background:var(--bacteria);opacity:0.6;"></div>分解 decompose</div>
+      <div class="edge-row"><div class="edge-line" style="background:var(--earthworm);opacity:0.8;"></div>捕食 predation</div>
+      <div class="edge-row"><div class="edge-line" style="background:var(--plantroot);opacity:0.7;"></div>共生 symbiosis</div>
+      <div class="edge-row"><div class="edge-line" style="background:var(--fungi);opacity:0.6;"></div>競争 competition</div>
+      <div class="edge-row"><div class="edge-line" style="background:var(--water);opacity:0.5;"></div>輸送 transport</div>
+    </div>
+  </div>
+
+  <!-- Event log -->
+  <div class="sec">
+    <div class="sec-title">▸ 生態プロセスログ</div>
+    <div id="event-log"></div>
+  </div>
+
+</div><!-- /panel -->
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════
+//  PAPER-FAITHFUL SOIL ECOSYSTEM ANT SIMULATION
+//  1 tick = 60 seconds (real-time scale)
+//  Lotka-Volterra interaction model per paper Table 1
+//  Graph metrics: ρ, k̄, C, H', J', S per paper equations
+// ═══════════════════════════════════════════════════════════════
+
+// ── Actor definitions (paper Table 2) ──────────────────────────
+const TYPES = {
+  bacteria:  { name:'細菌',     en:'bacteria',  color:'#00e8ff', r:4,  maxPop:140, eInit:60,  maxAge:200, speed:0.55, metabolism:0.08 },
+  fungi:     { name:'菌根菌',   en:'fungi',     color:'#ff8c00', r:5,  maxPop:55,  eInit:70,  maxAge:600, speed:0.15, metabolism:0.06 },
+  nematode:  { name:'線虫',     en:'nematode',  color:'#b8ff00', r:4,  maxPop:45,  eInit:50,  maxAge:400, speed:0.85, metabolism:0.10 },
+  protozoa:  { name:'原生動物', en:'protozoa',  color:'#e844ff', r:3,  maxPop:40,  eInit:45,  maxAge:300, speed:1.10, metabolism:0.12 },
+  earthworm: { name:'ミミズ',   en:'earthworm', color:'#ff3d3d', r:8,  maxPop:10,  eInit:100, maxAge:1500,speed:0.32, metabolism:0.15 },
+  plantroot: { name:'植物根',   en:'plantroot', color:'#44ff88', r:7,  maxPop:8,   eInit:200, maxAge:3000,speed:0.05, metabolism:0.04 },
+  organic:   { name:'有機物',   en:'organic',   color:'#9a7244', r:5,  maxPop:90,  eInit:100, maxAge:500, speed:0.04, metabolism:0.02 },
+  water:     { name:'水分',     en:'water',     color:'#3db8ff', r:3,  maxPop:70,  eInit:80,  maxAge:800, speed:0.38, metabolism:0.01 },
+  oxygen:    { name:'酸素',     en:'oxygen',    color:'#dde8ff', r:2,  maxPop:55,  eInit:60,  maxAge:400, speed:0.48, metabolism:0.02 },
+};
+const TYPE_KEYS = Object.keys(TYPES);
+const N_TYPES   = TYPE_KEYS.length; // 9
+
+// Interaction radii
+const I_RADIUS = {
+  bacteria:35, fungi:55, nematode:42, protozoa:38,
+  earthworm:65, plantroot:75, organic:0, water:45, oxygen:35
+};
+
+// Lotka-Volterra coefficients (paper Table 1): [alpha, beta]
+const LV = {
+  nematode_bacteria:  [5.0, 1.5],
+  protozoa_bacteria:  [6.0, 2.0],
+  nematode_fungi:     [3.0, 0.8],
+  bacteria_organic:   [3.0, 0.7],
+  fungi_organic:      [2.0, 0.6],
+  earthworm_organic:  [6.0, 0.9],
+};
+
+// Reproduction thresholds
+const REPRO_THRESH = {
+  bacteria:90, fungi:115, nematode:82, protozoa:72,
+  earthworm:165, plantroot:310
+};
+
+// ── Constants ───────────────────────────────────────────────────
+const MAX_AGENTS  = 450;
+const HISTORY_LEN = 150;
+const REPRO_PROB  = 0.08;
+const CELL_SIZE   = 65;
+
+// ── State ───────────────────────────────────────────────────────
+let W, H;
+let agents     = [];
+let tick       = 0;
+let paused     = false;
+let speed      = 4;
+let nextId     = 0;
+let showOPP    = true;
+let trackedId  = null;
+let animId;
+
+// History
+const hist = {
+  S: [], H: [], J: [], rho: [], C: [], deg: [],
+  pop: Object.fromEntries(TYPE_KEYS.map(k => [k, []]))
+};
+
+// Interaction edge log (current frame)
+let frameEdges = [];
+
+// Interaction matrix accumulator (reset every 20 ticks)
+const iMatrix = {};
+TYPE_KEYS.forEach(a => { iMatrix[a] = {}; TYPE_KEYS.forEach(b => iMatrix[a][b] = 0); });
+let iMatrixTick = 0;
+
+// Cached metrics
+const M = { rho:0, deg:0, C:0, H:0, J:0, S:0, edges:0 };
+
+// Event log
+const eventLog = [];
+
+// ── Spatial grid ────────────────────────────────────────────────
+class SpatialGrid {
+  constructor() { this.data = new Map(); this.cols = 1; this.cellSz = CELL_SIZE; }
+  reset(w,h) { this.cols = Math.ceil(w/CELL_SIZE); this.data.clear(); }
+  key(cx,cy) { return cx + cy * this.cols; }
+  insert(a) {
+    const cx = (a.x/CELL_SIZE)|0, cy = (a.y/CELL_SIZE)|0;
+    const k = this.key(cx,cy);
+    if(!this.data.has(k)) this.data.set(k,[]);
+    this.data.get(k).push(a);
+    a._gx=cx; a._gy=cy;
+  }
+  nearby(x,y,r) {
+    const cx=(x/CELL_SIZE)|0, cy=(y/CELL_SIZE)|0;
+    const rr=Math.ceil(r/CELL_SIZE);
+    const out=[];
+    for(let dx=-rr;dx<=rr;dx++) for(let dy=-rr;dy<=rr;dy++) {
+      const k=this.key(cx+dx,cy+dy);
+      if(this.data.has(k)) { const arr=this.data.get(k); for(let i=0;i<arr.length;i++) out.push(arr[i]); }
+    }
+    return out;
+  }
+}
+const grid = new SpatialGrid();
+
+// ── Agent class ─────────────────────────────────────────────────
+class Agent {
+  constructor(type, x, y) {
+    this.id   = nextId++;
+    this.type = type;
+    const T   = TYPES[type];
+    this.x    = x; this.y = y;
+    this.vx   = (Math.random()-0.5)*0.8;
+    this.vy   = (Math.random()-0.5)*0.8;
+    this.energy  = T.eInit + (Math.random()-0.5)*15;
+    this.age     = 0;
+    this.maxAge  = T.maxAge + (Math.random()*50|0);
+    this.r       = T.r;
+    this.dead    = false;
+    this.pulse   = Math.random()*Math.PI*2;
+    this.connections = new Set();  // connected agent ids this frame
+    this.connTypes   = new Set();  // edge types this frame
+    this._gx = 0; this._gy = 0;
+    this.opp_degree = 0; // for OPP display
+    // tracking
+    this.trail = [];
+  }
+
+  update() {
+    if(this.dead) return;
+    this.age++;
+    this.pulse += 0.06;
+    const T = TYPES[this.type];
+    this.energy -= T.metabolism;
+
+    // Movement
+    if(this.type !== 'organic') {
+      this.vx += (Math.random()-0.5)*0.28;
+      this.vy += (Math.random()-0.5)*0.28;
+      this.vx *= 0.92; this.vy *= 0.92;
+      const spd = Math.hypot(this.vx,this.vy);
+      if(spd > T.speed) { const inv=T.speed/spd; this.vx*=inv; this.vy*=inv; }
+      this.x = Math.max(this.r, Math.min(W-this.r, this.x + this.vx));
+      this.y = Math.max(this.r, Math.min(H-this.r, this.y + this.vy));
+      if(this.x<=this.r||this.x>=W-this.r) this.vx*=-1;
+      if(this.y<=this.r||this.y>=H-this.r) this.vy*=-1;
+    }
+
+    // Trail for tracked agent
+    if(this.id===trackedId) {
+      this.trail.push({x:this.x,y:this.y});
+      if(this.trail.length>80) this.trail.shift();
+    } else {
+      this.trail.length=0;
+    }
+
+    if(this.energy<=0 || this.age>=this.maxAge) this.die();
+  }
+
+  die() {
+    this.dead = true;
+    const decompTypes = ['bacteria','fungi','nematode','protozoa','earthworm','plantroot'];
+    if(decompTypes.includes(this.type) && agents.length<MAX_AGENTS) {
+      const o = new Agent('organic', clamp(this.x+rnd(-8,8),0,W), clamp(this.y+rnd(-8,8),0,H));
+      pendingAdd.push(o);
+    }
+    if(this.id===trackedId) trackedId=null;
+  }
+
+  canReproduce() {
+    const th = REPRO_THRESH[this.type];
+    return th!==undefined && this.energy>=th;
+  }
+
+  reproduce() {
+    const T = TYPES[this.type];
+    const cnt = agentCountByType[this.type]||0;
+    if(cnt >= T.maxPop || agents.length >= MAX_AGENTS) return null;
+    this.energy *= 0.55;
+    const ang = Math.random()*Math.PI*2, dist = this.r*2+2;
+    const child = new Agent(this.type,
+      clamp(this.x+Math.cos(ang)*dist, this.r, W-this.r),
+      clamp(this.y+Math.sin(ang)*dist, this.r, H-this.r)
+    );
+    child.energy = this.energy * 0.80;
+    return child;
+  }
+}
+
+// ── Pending spawn buffer ────────────────────────────────────────
+const pendingAdd = [];
+let agentCountByType = {};
+
+// ── Interaction engine ──────────────────────────────────────────
+function runInteractions() {
+  grid.reset(W,H);
+  frameEdges = [];
+
+  // Count by type
+  agentCountByType = {};
+  TYPE_KEYS.forEach(k => agentCountByType[k]=0);
+  for(const a of agents) if(!a.dead) { grid.insert(a); agentCountByType[a.type]=(agentCountByType[a.type]||0)+1; }
+
+  // Clear connections
+  for(const a of agents) if(!a.dead) { a.connections.clear(); a.connTypes.clear(); a.opp_degree=0; }
+
+  for(const a of agents) {
+    if(a.dead) continue;
+    const rad = I_RADIUS[a.type]||40;
+    const near = grid.nearby(a.x,a.y,rad);
+
+    for(const b of near) {
+      if(b===a||b.dead) continue;
+      const dx=b.x-a.x, dy=b.y-a.y;
+      const dist=Math.hypot(dx,dy);
+      if(dist>=rad||dist<0.5) continue;
+      const s = 1 - dist/rad; // interaction strength (distance dependent)
+
+      const pair = `${a.type}_${b.type}`;
+
+      // ── DECOMPOSITION (Lotka-Volterra) ──
+      if((a.type==='bacteria'||a.type==='fungi'||a.type==='earthworm') && b.type==='organic') {
+        const [al,be] = LV[pair]||[2.0,0.6];
+        const dE = al * s;
+        a.energy += dE;
+        b.energy -= be * s * b.energy * 0.04;
+        if(b.energy<=0) b.dead=true;
+        addEdge(a,b,'D'); addConn(a,b,'D');
+        iMatrix[a.type][b.type]++;
+      }
+
+      // ── PREDATION: nematode → bacteria (Lotka-Volterra) ──
+      if(a.type==='nematode' && b.type==='bacteria' && dist<42) {
+        const [al,be] = LV['nematode_bacteria'];
+        const dE = al * s;
+        a.energy += dE;
+        b.energy -= be * dE;
+        if(b.energy<=0) b.die();
+        addEdge(a,b,'P'); addConn(a,b,'P');
+        iMatrix[a.type][b.type]++;
+        if(Math.random()<0.008) addLog('死','線虫→細菌 捕食');
+      }
+
+      // ── PREDATION: protozoa → bacteria ──
+      if(a.type==='protozoa' && b.type==='bacteria' && dist<36) {
+        const [al,be] = LV['protozoa_bacteria'];
+        const dE = al * s;
+        a.energy += dE;
+        b.energy -= be * dE;
+        if(b.energy<=0) b.die();
+        addEdge(a,b,'P'); addConn(a,b,'P');
+        iMatrix[a.type][b.type]++;
+        if(Math.random()<0.006) addLog('死','原生動物→細菌 捕食');
+      }
+
+      // ── PREDATION: nematode → fungi ──
+      if(a.type==='nematode' && b.type==='fungi' && dist<48) {
+        const [al,be] = LV['nematode_fungi'];
+        const dE = al * s;
+        a.energy += dE;
+        b.energy -= be * dE;
+        if(b.energy<=0) b.die();
+        addEdge(a,b,'P'); addConn(a,b,'P');
+        iMatrix[a.type][b.type]++;
+      }
+
+      // ── SYMBIOSIS: fungi ↔ plantroot ──
+      if(a.type==='fungi' && b.type==='plantroot') {
+        const dE = 2.5 * s;
+        a.energy += dE; b.energy += dE * 0.45;
+        addEdge(a,b,'S'); addConn(a,b,'S');
+        iMatrix[a.type][b.type]++;
+      }
+
+      // ── SYMBIOSIS: bacteria ↔ fungi (nutrient sharing) ──
+      if(a.type==='bacteria' && b.type==='fungi' && dist<40) {
+        a.energy += 0.3*s; b.energy += 0.2*s;
+        addEdge(a,b,'S'); addConn(a,b,'S');
+        iMatrix[a.type][b.type]++;
+      }
+
+      // ── COMPETITION: bacteria ↔ fungi near organic ──
+      if(a.type==='bacteria' && b.type==='fungi' && dist<32) {
+        const ang=Math.atan2(dy,dx), push=s*0.35;
+        a.vx-=Math.cos(ang)*push; a.vy-=Math.sin(ang)*push;
+        addEdge(a,b,'C'); addConn(a,b,'C');
+        iMatrix[a.type][b.type]++;
+      }
+
+      // ── TRANSPORT: water → biota ──
+      if(a.type==='water' && (b.type==='bacteria'||b.type==='plantroot'||b.type==='fungi'||b.type==='nematode')) {
+        b.energy += 0.55*s; a.energy -= 0.18*s;
+        addEdge(a,b,'T'); addConn(a,b,'T');
+        a.opp_degree++; b.opp_degree++;
+        iMatrix[a.type][b.type]++;
+      }
+
+      // ── TRANSPORT: oxygen → aerobic organisms ──
+      if(a.type==='oxygen' && (b.type==='bacteria'||b.type==='fungi')) {
+        b.energy += 0.32*s; a.energy -= 0.28*s;
+        addEdge(a,b,'T'); addConn(a,b,'T');
+        iMatrix[a.type][b.type]++;
+      }
+
+      // ── Earthworm soil tillage → oxygen production ──
+      if(a.type==='earthworm' && b.type==='organic' && dist<50) {
+        a.energy += 5.5*s;
+        b.energy -= 7*s*0.04*b.energy;
+        if(b.energy<=0) b.dead=true;
+        addEdge(a,b,'D'); addConn(a,b,'D');
+        iMatrix[a.type][b.type]++;
+        if(Math.random()<0.006) {
+          pendingAdd.push(new Agent('oxygen', a.x+rnd(-18,18), a.y+rnd(-18,18)));
+          addLog('event','ミミズ耕耘→酸素生成');
+        }
+      }
+
+      // ── PlantRoot rhizosphere: bacteria attraction ──
+      if(a.type==='plantroot' && b.type==='water' && dist<75) {
+        a.energy += 0.9*s; b.energy -= 0.25*s;
+        addEdge(a,b,'T'); addConn(a,b,'T');
+        a.opp_degree++;
+        if(Math.random()<0.003) pendingAdd.push(new Agent('oxygen',a.x+rnd(-12,12),a.y-8));
+        iMatrix[a.type][b.type]++;
+      }
+
+      // ── Root exudate: plantroot → organic ──
+      if(a.type==='plantroot' && dist<65 && Math.random()<0.0012) {
+        pendingAdd.push(new Agent('organic', a.x+rnd(-35,35), a.y+rnd(-35,35)));
+      }
+
+      // ── Fungi OPP degree accumulation ──
+      if(a.type==='fungi') a.opp_degree += a.connections.size;
+    }
+  }
+}
+
+function addEdge(a,b,type) {
+  frameEdges.push({ax:a.x,ay:a.y,bx:b.x,by:b.y,type});
+}
+function addConn(a,b,type) {
+  a.connections.add(b.id); b.connections.add(a.id);
+  a.connTypes.add(type); b.connTypes.add(type);
+}
+
+// ── Periodic ecological events ───────────────────────────────────
+function periodicEvents() {
+  // Rain event (200 tick ≈ 200min≈3.3hr)
+  if(tick%200===0) {
+    const cnt = agentCountByType['water']||0;
+    if(cnt < TYPES.water.maxPop) {
+      for(let i=0;i<7;i++) pendingAdd.push(new Agent('water', rnd(10,W-10), rnd(10,H/3)));
+      addLog('event','💧 降雨イベント（200min周期）→ 水分補給');
+    }
+  }
+  // Leaf litter (150 tick ≈ 150min≈2.5hr)
+  if(tick%150===0) {
+    const cnt = agentCountByType['organic']||0;
+    if(cnt < TYPES.organic.maxPop) {
+      for(let i=0;i<6;i++) pendingAdd.push(new Agent('organic',rnd(20,W-20),rnd(20,H-20)));
+      addLog('event','🍂 落葉投入（150min周期）→ 有機物補給');
+    }
+  }
+  // Root zone burst (300 tick ≈ 300min≈5hr)
+  if(tick%300===0) {
+    const roots = agents.filter(a=>!a.dead&&a.type==='plantroot');
+    let added=0;
+    roots.forEach(r => {
+      for(let i=0;i<5;i++) {
+        if(agents.length+added<MAX_AGENTS) {
+          pendingAdd.push(new Agent('bacteria',clamp(r.x+rnd(-55,55),0,W),clamp(r.y+rnd(-55,55),0,H)));
+          added++;
+        }
+      }
+    });
+    if(roots.length>0) addLog('birth','🌱 根圏効果→ 細菌増殖（300min周期）');
+  }
+  // Fungi EPS secretion → occasional water retention (500 tick)
+  if(tick%500===0) {
+    addLog('event','🍄 菌根菌EPS分泌→ 団粒構造形成');
+  }
+}
+
+// ── Graph metrics computation ────────────────────────────────────
+function computeMetrics() {
+  const live = agents.filter(a=>!a.dead);
+  const n = live.length;
+  if(n<2) return;
+
+  // Population by type
+  const cnt = {}; TYPE_KEYS.forEach(t=>cnt[t]=0);
+  live.forEach(a=>cnt[a.type]++);
+  const N = live.length;
+
+  // Shannon H' = -Σ pᵢ ln pᵢ
+  let H=0;
+  TYPE_KEYS.forEach(t => { const p=cnt[t]/N; if(p>0) H -= p*Math.log(p); });
+  const Hmax = Math.log(N_TYPES);
+  const Jprime = Hmax>0 ? H/Hmax : 0;
+
+  // Edge count, avg degree
+  const m = frameEdges.length;
+  const totalDeg = live.reduce((s,a)=>s+a.connections.size,0);
+  const avgDeg = n>0 ? totalDeg/n : 0;
+
+  // Network density ρ = 2m / n(n-1)
+  const maxEdges = n*(n-1)/2;
+  const rho = maxEdges>0 ? Math.min(m/maxEdges,1) : 0;
+
+  // Clustering coefficient C
+  let Csum=0, Cn=0;
+  for(const a of live) {
+    const nbrs=[...a.connections].map(id=>live.find(x=>x.id===id)).filter(Boolean);
+    const k=nbrs.length;
+    if(k<2) continue;
+    let tri=0;
+    for(let i=0;i<nbrs.length;i++) for(let j=i+1;j<nbrs.length;j++)
+      if(nbrs[i].connections.has(nbrs[j].id)) tri++;
+    Csum += tri/(k*(k-1)/2);
+    Cn++;
+  }
+  const C = Cn>0 ? Csum/Cn : 0;
+
+  // Stability S = 0.4·J' + 0.3·min(20ρ,1) + 0.3·B
+  const B = N>0 ? 1 - Math.max(...Object.values(cnt))/N : 0;
+  const S = 0.4*Jprime + 0.3*Math.min(20*rho,1) + 0.3*B;
+
+  Object.assign(M, { rho, deg:avgDeg, C, H, J:Jprime, S, edges:m });
+
+  // Push history
+  push(hist.S, S); push(hist.H, Jprime); push(hist.J, Jprime);
+  push(hist.rho, rho); push(hist.C, C); push(hist.deg, avgDeg);
+  TYPE_KEYS.forEach(t => push(hist.pop[t], cnt[t]));
+}
+
+function push(arr,v) { arr.push(v); if(arr.length>HISTORY_LEN) arr.shift(); }
+
+// ── Phase detection ──────────────────────────────────────────────
+function getPhase() {
+  const bc = agentCountByType['bacteria']||0;
+  const ne = agentCountByType['nematode']||0;
+  const pr = agentCountByType['protozoa']||0;
+  const fu = agentCountByType['fungi']||0;
+  if(ne+pr < 8)  return 1;
+  if(ne+pr >= 8 && M.J < 0.65) return 2;
+  return 3;
+}
+
+// ── Rendering ────────────────────────────────────────────────────
+const EDGE_COLORS = {
+  D: 'rgba(0,232,255,0.28)',
+  P: 'rgba(255,61,61,0.60)',
+  S: 'rgba(68,255,136,0.50)',
+  C: 'rgba(255,140,0,0.32)',
+  T: 'rgba(61,184,255,0.22)',
+};
+const EDGE_WIDTH = { D:0.8, P:1.6, S:1.2, C:0.8, T:0.7 };
+
+function render() {
+  const canvas = document.getElementById('sim-canvas');
+  const ctx    = canvas.getContext('2d');
+
+  // Soil background
+  ctx.fillStyle = '#050403';
+  ctx.fillRect(0,0,W,H);
+
+  // Subtle grain texture
+  ctx.save();
+  ctx.globalAlpha = 0.025;
+  for(let x=0;x<W;x+=3) for(let y=0;y<H;y+=3) {
+    if(Math.random()<0.15) { ctx.fillStyle='#a07848'; ctx.fillRect(x,y,1,1); }
+  }
+  ctx.restore();
+
+  // Depth grid
+  ctx.strokeStyle='rgba(45,34,24,0.25)';
+  ctx.lineWidth=0.4;
+  for(let x=0;x<W;x+=50) { ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke(); }
+  for(let y=0;y<H;y+=50) { ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke(); }
+
+  // Tracked agent trail
+  const tracked = trackedId!=null ? agents.find(a=>a.id===trackedId) : null;
+  if(tracked && tracked.trail.length>1) {
+    ctx.save();
+    ctx.lineWidth=1.5;
+    ctx.strokeStyle = TYPES[tracked.type].color+'80';
+    ctx.setLineDash([3,3]);
+    ctx.beginPath();
+    tracked.trail.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // Edges (limit for perf)
+  const maxEdges = 600;
+  const step = frameEdges.length>maxEdges ? Math.ceil(frameEdges.length/maxEdges) : 1;
+  for(let i=0;i<frameEdges.length;i+=step) {
+    const e=frameEdges[i];
+    ctx.beginPath();
+    ctx.moveTo(e.ax,e.ay);
+    ctx.lineTo(e.bx,e.by);
+    ctx.strokeStyle=EDGE_COLORS[e.type];
+    ctx.lineWidth=EDGE_WIDTH[e.type];
+    ctx.stroke();
+  }
+
+  // OPP highlighting
+  if(showOPP) {
+    // Find water & fungi as OPP candidates
+    const oppTypes=['water','fungi','organic'];
+    for(const a of agents) {
+      if(a.dead||!oppTypes.includes(a.type)) continue;
+      if(a.connections.size>=4) {
+        const r=a.r*4.5;
+        ctx.save();
+        ctx.globalAlpha=0.12;
+        const grad=ctx.createRadialGradient(a.x,a.y,0,a.x,a.y,r);
+        grad.addColorStop(0,TYPES[a.type].color);
+        grad.addColorStop(1,'transparent');
+        ctx.beginPath(); ctx.arc(a.x,a.y,r,0,Math.PI*2);
+        ctx.fillStyle=grad; ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+  // Agents
+  const t=tick*0.05;
+  for(const a of agents) {
+    if(a.dead) continue;
+    const T=TYPES[a.type];
+    const pulse=0.87+0.13*Math.sin(a.pulse);
+    const r=a.r*pulse;
+    const col=T.color;
+
+    // Glow
+    const gr=r*3.0;
+    const grd=ctx.createRadialGradient(a.x,a.y,0,a.x,a.y,gr);
+    grd.addColorStop(0,col+'55');
+    grd.addColorStop(1,'transparent');
+    ctx.beginPath(); ctx.arc(a.x,a.y,gr,0,Math.PI*2);
+    ctx.fillStyle=grd; ctx.fill();
+
+    // Core
+    ctx.beginPath(); ctx.arc(a.x,a.y,r,0,Math.PI*2);
+    if(a.type==='organic') {
+      ctx.fillStyle=`hsl(30,45%,${18+a.energy/9}%)`;
+    } else if(a.type==='water') {
+      ctx.fillStyle=col+'88';
+    } else if(a.type==='oxygen') {
+      ctx.fillStyle=col+'70';
+    } else {
+      ctx.fillStyle=col;
+    }
+    ctx.fill();
+
+    // Energy arc for living organisms
+    const bioTypes=['bacteria','fungi','nematode','protozoa','earthworm','plantroot'];
+    if(bioTypes.includes(a.type)) {
+      const ep=Math.max(0,Math.min(1,a.energy/T.eInit));
+      ctx.beginPath();
+      ctx.arc(a.x,a.y,r+2,-Math.PI/2,-Math.PI/2+ep*Math.PI*2);
+      ctx.strokeStyle=col+'88';
+      ctx.lineWidth=1.2;
+      ctx.stroke();
+    }
+
+    // OPP ring
+    if(showOPP && a.connections.size>=4 && ['water','fungi','organic'].includes(a.type)) {
+      ctx.beginPath();
+      ctx.arc(a.x,a.y,r+4,0,Math.PI*2);
+      ctx.strokeStyle=col+'cc';
+      ctx.lineWidth=1;
+      ctx.setLineDash([2,2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Tracked agent highlight
+    if(a.id===trackedId) {
+      ctx.beginPath();
+      ctx.arc(a.x,a.y,r+5,0,Math.PI*2);
+      ctx.strokeStyle='#ffffff88';
+      ctx.lineWidth=1.5;
+      ctx.stroke();
+    }
+  }
+}
+
+// ── UI update ────────────────────────────────────────────────────
+function updateUI() {
+  // Tick / real-time
+  document.getElementById('tick-val').textContent = tick;
+  const realSec = tick * 60;
+  const h=Math.floor(realSec/3600), m=Math.floor((realSec%3600)/60), s=realSec%60;
+  document.getElementById('realtime-val').textContent =
+    h>0 ? `${h}h${String(m).padStart(2,'0')}m` : `${m}m${String(s).padStart(2,'0')}s`;
+
+  // Metrics
+  document.getElementById('m-rho').textContent   = M.rho.toFixed(4);
+  document.getElementById('m-deg').textContent   = M.deg.toFixed(2);
+  document.getElementById('m-clust').textContent = M.C.toFixed(4);
+  document.getElementById('m-hprime').textContent= M.H.toFixed(4);
+  document.getElementById('m-jprime').textContent= M.J.toFixed(4);
+  document.getElementById('m-stab').textContent  = M.S.toFixed(4);
+
+  // Phase
+  const ph=getPhase();
+  const phaseInfo=[
+    null,
+    {label:'Phase 1: 初期増殖期',desc:'細菌ブルーム — 有機物分解旺盛期',color:'var(--bacteria)'},
+    {label:'Phase 2: 捕食者台頭期',desc:'Lotka-Volterra振動 — 個体数サイクル',color:'var(--earthworm)'},
+    {label:'Phase 3: 共生安定期',desc:'菌根菌-植物根共生 — 小世界構造形成',color:'var(--plantroot)'},
+  ];
+  if(ph>=1) {
+    const pi=phaseInfo[ph];
+    document.getElementById('ph-name').textContent=pi.label;
+    document.getElementById('ph-desc').textContent=pi.desc;
+    document.getElementById('phase-badge').textContent=pi.label;
+    document.getElementById('phase-badge').style.color=pi.color;
+    document.getElementById('phase-badge').style.borderColor=pi.color;
+    [1,2,3].forEach(i=>{
+      const el=document.getElementById(`ps-${i}`);
+      el.classList.toggle('active',i===ph);
+    });
+  }
+
+  // Population bars
+  const popTable=document.getElementById('pop-table');
+  TYPE_KEYS.forEach(t=>{
+    const el=document.getElementById(`bar-${t}`);
+    const cel=document.getElementById(`cnt-${t}`);
+    if(!el||!cel) return;
+    const cnt=agentCountByType[t]||0;
+    const pct=Math.min(100,cnt/TYPES[t].maxPop*100);
+    el.style.width=pct+'%';
+    cel.textContent=cnt;
+  });
+
+  // OPP indicators
+  const fungiAgents=agents.filter(a=>!a.dead&&a.type==='fungi');
+  const fungiDeg=fungiAgents.reduce((s,a)=>s+a.connections.size,0);
+  const waterAgents=agents.filter(a=>!a.dead&&a.type==='water');
+  const waterDeg=waterAgents.reduce((s,a)=>s+a.opp_degree,0);
+  const orgCnt=agentCountByType['organic']||0;
+
+  const oppItems=[
+    {id:'opp-fungi',valId:'opp-fungi-val',val:fungiDeg,threshold:12},
+    {id:'opp-water',valId:'opp-water-val',val:waterDeg,threshold:15},
+    {id:'opp-organic',valId:'opp-organic-val',val:orgCnt,threshold:8},
+  ];
+  oppItems.forEach(o=>{
+    const dot=document.getElementById(o.id);
+    const valEl=document.getElementById(o.valId);
+    if(dot) dot.classList.toggle('active',o.val>=o.threshold);
+    if(valEl) valEl.textContent=o.val;
+  });
+
+  // Interaction matrix
+  const tbody=document.getElementById('imatrix-body');
+  if(tbody && tick%40===0) {
+    const shortNames={bacteria:'細菌',fungi:'菌根',nematode:'線虫',protozoa:'原生',earthworm:'蚯蚓',plantroot:'植根',organic:'有機',water:'水分',oxygen:'酸素'};
+    const typeClass={D:'matrix-cell-D',P:'matrix-cell-P',S:'matrix-cell-S',C:'matrix-cell-C',T:'matrix-cell-T'};
+    // Recompute edge type dominance from frameEdges
+    const edgeCount={};
+    TYPE_KEYS.forEach(a=>{edgeCount[a]={};TYPE_KEYS.forEach(b=>edgeCount[a][b]={D:0,P:0,S:0,C:0,T:0});});
+    for(const e of frameEdges) {
+      // find which agents
+    }
+    tbody.innerHTML = TYPE_KEYS.map(a=>`<tr>
+      <th style="color:${TYPES[a].color}">${shortNames[a]}</th>
+      ${TYPE_KEYS.map(b=>{
+        const v=iMatrix[a][b];
+        if(v===0) return '<td class="matrix-cell-0">·</td>';
+        const pct=Math.min(v/5,1);
+        const bold=v>=4?'font-weight:600;':''
+        // Determine dominant type
+        let cls='matrix-cell-D';
+        if(a==='nematode'||a==='protozoa') cls='matrix-cell-P';
+        if((a==='fungi'&&b==='plantroot')||(a==='bacteria'&&b==='fungi'&&v<3)) cls='matrix-cell-S';
+        if(a==='bacteria'&&b==='fungi'&&v>=3) cls='matrix-cell-C';
+        if(a==='water'||a==='oxygen') cls='matrix-cell-T';
+        return `<td class="${cls}" style="${bold}opacity:${0.4+pct*0.6}">${v}</td>`;
+      }).join('')}
+    </tr>`).join('');
+    // Reset matrix
+    TYPE_KEYS.forEach(a=>TYPE_KEYS.forEach(b=>iMatrix[a][b]=0));
+    iMatrixTick=tick;
+  }
+
+  // Charts
+  renderChart('chart-stab', [
+    {data:hist.S, color:'#44ff88'},
+    {data:hist.H, color:'#3db8ff'},
+  ], 0, 1, ['S','J\'']);
+  renderChart('chart-net', [
+    {data:hist.rho, color:'#00e8ff'},
+    {data:hist.C,   color:'#e844ff'},
+  ], 0, null, ['ρ','C']);
+  renderPopChart();
+
+  // Event log
+  const logEl=document.getElementById('event-log');
+  if(pendingLogItems.length>0) {
+    pendingLogItems.forEach(item=>{
+      const div=document.createElement('div');
+      div.className=`log-line ${item.cls}`;
+      div.innerHTML=`<span class="log-tick">${item.tick}</span><span class="log-msg">${item.msg}</span>`;
+      logEl.insertBefore(div,logEl.firstChild);
+    });
+    while(logEl.children.length>14) logEl.removeChild(logEl.lastChild);
+    pendingLogItems.length=0;
+  }
+}
+
+// ── Mini chart renderer ──────────────────────────────────────────
+function renderChart(id, series, yMin, yMax, labels) {
+  const canvas=document.getElementById(id);
+  if(!canvas) return;
+  const w=canvas.offsetWidth||274, h=canvas.height||45;
+  canvas.width=w;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#0b0906'; ctx.fillRect(0,0,w,h);
+
+  const allVals=series.flatMap(s=>s.data);
+  const lo=yMin ?? Math.min(...allVals, 0);
+  let hi=yMax ?? Math.max(...allVals, 0.01);
+  if(hi<=lo) hi=lo+0.01;
+  const pad=2;
+
+  // Gridlines
+  ctx.strokeStyle='rgba(45,34,24,0.6)'; ctx.lineWidth=0.5;
+  for(let i=0;i<=3;i++) {
+    const y=pad+(h-2*pad)*(1-i/3);
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    ctx.fillStyle='rgba(120,100,72,0.5)'; ctx.font='6px monospace';
+    ctx.fillText((lo+(hi-lo)*i/3).toFixed(2),2,y-1);
+  }
+
+  series.forEach((s,si)=>{
+    if(s.data.length<2) return;
+    // Fill
+    ctx.beginPath();
+    s.data.forEach((v,i)=>{
+      const x=(i/(HISTORY_LEN-1))*w;
+      const y=pad+(h-2*pad)*(1-(v-lo)/(hi-lo));
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.lineTo((s.data.length-1)/(HISTORY_LEN-1)*w,h);
+    ctx.lineTo(0,h); ctx.closePath();
+    const grad=ctx.createLinearGradient(0,0,0,h);
+    grad.addColorStop(0,s.color+'44'); grad.addColorStop(1,s.color+'04');
+    ctx.fillStyle=grad; ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    s.data.forEach((v,i)=>{
+      const x=(i/(HISTORY_LEN-1))*w;
+      const y=pad+(h-2*pad)*(1-(v-lo)/(hi-lo));
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle=s.color; ctx.lineWidth=1.3; ctx.stroke();
+
+    // Label & current value
+    if(labels&&labels[si] && s.data.length>0) {
+      const lv=s.data[s.data.length-1];
+      const x=((s.data.length-1)/(HISTORY_LEN-1))*w;
+      const y=pad+(h-2*pad)*(1-(lv-lo)/(hi-lo));
+      ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2);
+      ctx.fillStyle=s.color; ctx.fill();
+      ctx.fillStyle=s.color; ctx.font='7px monospace';
+      ctx.fillText(`${labels[si]}=${lv.toFixed(3)}`,Math.max(0,x-22),Math.max(8,y-4));
+    }
+  });
+}
+
+function renderPopChart() {
+  const canvas=document.getElementById('chart-pop');
+  if(!canvas) return;
+  const w=canvas.offsetWidth||274, h=canvas.height||55;
+  canvas.width=w;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#0b0906'; ctx.fillRect(0,0,w,h);
+
+  const bioTypes=['bacteria','fungi','nematode','protozoa','earthworm'];
+  const allVals=bioTypes.flatMap(t=>hist.pop[t]);
+  const hi=Math.max(10,...allVals);
+  const pad=2;
+
+  ctx.strokeStyle='rgba(45,34,24,0.6)'; ctx.lineWidth=0.5;
+  [0.25,0.5,0.75,1].forEach(f=>{
+    const y=pad+(h-2*pad)*(1-f);
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    ctx.fillStyle='rgba(120,100,72,0.5)'; ctx.font='6px monospace';
+    ctx.fillText((hi*f|0),2,y-1);
+  });
+
+  bioTypes.forEach(t=>{
+    const data=hist.pop[t];
+    if(data.length<2) return;
+    const col=TYPES[t].color;
+    ctx.beginPath();
+    data.forEach((v,i)=>{
+      const x=(i/(HISTORY_LEN-1))*w;
+      const y=pad+(h-2*pad)*(1-v/hi);
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle=col+'cc'; ctx.lineWidth=1; ctx.stroke();
+    if(data.length>0) {
+      const lv=data[data.length-1];
+      const x=((data.length-1)/(HISTORY_LEN-1))*w;
+      const y=pad+(h-2*pad)*(1-lv/hi);
+      ctx.beginPath(); ctx.arc(x,y,2,0,Math.PI*2); ctx.fillStyle=col; ctx.fill();
+    }
+  });
+}
+
+// ── Population bar DOM ───────────────────────────────────────────
+function buildPopTable() {
+  const el=document.getElementById('pop-table');
+  el.innerHTML=TYPE_KEYS.map(t=>`
+    <div class="pop-row">
+      <div class="pop-dot" style="background:${TYPES[t].color};box-shadow:0 0 4px ${TYPES[t].color}88;"></div>
+      <div class="pop-name">${TYPES[t].name}</div>
+      <div class="pop-bar-bg"><div class="pop-bar-fill" id="bar-${t}" style="background:${TYPES[t].color};width:0%;"></div></div>
+      <div class="pop-count" id="cnt-${t}">0</div>
+    </div>`).join('');
+}
+
+function buildNodeLegend() {
+  const el=document.getElementById('node-legend');
+  el.innerHTML=TYPE_KEYS.map(t=>`
+    <div class="leg-item">
+      <div class="leg-dot" style="background:${TYPES[t].color};box-shadow:0 0 3px ${TYPES[t].color}88;"></div>
+      ${TYPES[t].name}
+    </div>`).join('');
+}
+
+// ── Event log buffer ─────────────────────────────────────────────
+const pendingLogItems=[];
+function addLog(cls,msg) {
+  pendingLogItems.push({tick,cls,msg});
+}
+
+// ── Tooltip ──────────────────────────────────────────────────────
+function setupTooltip() {
+  const canvas=document.getElementById('sim-canvas');
+  const tooltip=document.getElementById('tooltip');
+
+  canvas.addEventListener('mousemove',e=>{
+    const rect=canvas.getBoundingClientRect();
+    const scaleX=W/rect.width, scaleY=H/rect.height;
+    const mx=(e.clientX-rect.left)*scaleX;
+    const my=(e.clientY-rect.top)*scaleY;
+    let closest=null,minD=18;
+    for(const a of agents) {
+      if(a.dead) continue;
+      const d=Math.hypot(a.x-mx,a.y-my);
+      if(d<minD){minD=d;closest=a;}
+    }
+    if(closest){
+      const T=TYPES[closest.type];
+      tooltip.style.display='block';
+      tooltip.style.left=(e.clientX-rect.left+14)+'px';
+      tooltip.style.top=(e.clientY-rect.top-55)+'px';
+      tooltip.innerHTML=`
+        <div style="color:${T.color};font-weight:500;margin-bottom:2px;">${T.name} (ID ${closest.id})</div>
+        エネルギー: ${closest.energy.toFixed(1)} / ${T.eInit}<br>
+        年齢: ${closest.age} / ${closest.maxAge} tick<br>
+        接続数: ${closest.connections.size}<br>
+        エッジ種: ${[...closest.connTypes].join(', ')||'—'}<br>
+        実経過: ${(closest.age*60/60).toFixed(0)}分
+      `;
+    } else {
+      tooltip.style.display='none';
+    }
+  });
+  canvas.addEventListener('mouseleave',()=>{tooltip.style.display='none';});
+  canvas.addEventListener('click',e=>{
+    const rect=canvas.getBoundingClientRect();
+    const scaleX=W/rect.width,scaleY=H/rect.height;
+    const mx=(e.clientX-rect.left)*scaleX, my=(e.clientY-rect.top)*scaleY;
+    let closest=null,minD=20;
+    for(const a of agents) {
+      if(a.dead) continue;
+      const d=Math.hypot(a.x-mx,a.y-my);
+      if(d<minD){minD=d;closest=a;}
+    }
+    trackedId = (closest&&closest.id!==trackedId) ? closest.id : null;
+  });
+}
+
+// ── Initialization ────────────────────────────────────────────────
+function init() {
+  const canvas=document.getElementById('sim-canvas');
+  const wrap=document.getElementById('sim-wrap');
+  W=wrap.offsetWidth; H=wrap.offsetHeight;
+  canvas.width=W; canvas.height=H;
+  grid.reset(W,H);
+
+  agents=[]; tick=0; nextId=0;
+  Object.values(hist).forEach(v=>Array.isArray(v)?v.length=0:TYPE_KEYS.forEach(k=>hist.pop[k]&&(hist.pop[k].length=0)));
+  TYPE_KEYS.forEach(t=>{hist.pop[t]=[];});
+  pendingAdd.length=0;
+  pendingLogItems.length=0;
+
+  const initial={
+    bacteria:65, fungi:18, nematode:10, protozoa:8,
+    earthworm:4, plantroot:4, organic:45, water:32, oxygen:20
+  };
+  Object.entries(initial).forEach(([type,count])=>{
+    for(let i=0;i<count;i++) {
+      agents.push(new Agent(type,rnd(20,W-20),rnd(20,H-20)));
+    }
+  });
+  buildPopTable();
+  buildNodeLegend();
+}
+
+// ── Main loop ────────────────────────────────────────────────────
+function loop() {
+  animId=requestAnimationFrame(loop);
+  if(paused) return;
+
+  for(let s=0;s<speed;s++) {
+    tick++;
+
+    // Update agents
+    for(let i=agents.length-1;i>=0;i--) agents[i].update();
+
+    // Interactions
+    runInteractions();
+
+    // Pending spawns
+    for(const a of pendingAdd) if(agents.length<MAX_AGENTS) agents.push(a);
+    pendingAdd.length=0;
+
+    // Reproduction
+    const toAdd=[];
+    for(const a of agents) {
+      if(!a.dead&&a.canReproduce()&&Math.random()<REPRO_PROB) {
+        const child=a.reproduce();
+        if(child) {
+          toAdd.push(child);
+          if(Math.random()<0.03) addLog('birth',`${TYPES[a.type].name}が複製`);
+        }
+      }
+    }
+    toAdd.forEach(c=>agents.push(c));
+
+    // Periodic events
+    periodicEvents();
+
+    // Cleanup
+    if(agents.length>MAX_AGENTS*1.15 || tick%80===0) {
+      agents=agents.filter(a=>!a.dead);
+    }
+
+    // Metrics (every 15 ticks)
+    if(tick%15===0) computeMetrics();
+  }
+
+  render();
+  updateUI();
+}
+
+// ── Controls ──────────────────────────────────────────────────────
+document.getElementById('btn-pause').addEventListener('click',()=>{
+  paused=!paused;
+  const btn=document.getElementById('btn-pause');
+  btn.textContent=paused?'▶ 再開':'⏸ 停止';
+  btn.classList.toggle('active',paused);
+});
+
+document.getElementById('btn-reset').addEventListener('click',()=>{
+  cancelAnimationFrame(animId);
+  init(); loop();
+});
+
+document.getElementById('btn-opp').addEventListener('click',()=>{
+  showOPP=!showOPP;
+  document.getElementById('btn-opp').classList.toggle('active',showOPP);
+});
+
+document.getElementById('speed-sl').addEventListener('input',e=>{
+  speed=+e.target.value;
+  document.getElementById('speed-val').textContent=speed+'×';
+});
+
+window.addEventListener('resize',()=>{
+  const canvas=document.getElementById('sim-canvas');
+  const wrap=document.getElementById('sim-wrap');
+  W=wrap.offsetWidth; H=wrap.offsetHeight;
+  canvas.width=W; canvas.height=H;
+  grid.reset(W,H);
+});
+
+// ── Utils ─────────────────────────────────────────────────────────
+function rnd(a,b){ return a+Math.random()*(b-a); }
+function clamp(v,lo,hi){ return v<lo?lo:v>hi?hi:v; }
+
+// ── Start ─────────────────────────────────────────────────────────
+window.addEventListener('load',()=>{
+  init();
+  setupTooltip();
+  loop();
+});
+</script>
+</body>
+</html>
