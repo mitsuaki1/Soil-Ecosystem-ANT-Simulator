@@ -187,7 +187,9 @@ The simulation self-organizes into three emergent phases:
 ## ▶️ How to Run
 
 （実行方法１）
+
 GitHub Pages：
+
 https://mitsuaki1.github.io/Soil-Ecosystem-ANT-Simulator/
 
 （実行方法２）
