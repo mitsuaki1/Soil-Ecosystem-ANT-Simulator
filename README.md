@@ -1,8 +1,6 @@
 # Soil Ecosystem ANT Simulator
 
-### Actor-Network Theory-Based Real-Time Simulation of Multi-Species Interactions in Soil Ecosystems
-
-（土壌生態系アクターネットワーク・リアルタイムシミュレーション）
+### Actor-Network Theory-Based Real-Time Simulation of Multi-Species Interactions in Soil Ecosystems（土壌生態系アクターネットワーク・リアルタイムシミュレーション）
 
 （GitHub Pages）https://mitsuaki1.github.io/Soil-Ecosystem-ANT-Simulator/
 
